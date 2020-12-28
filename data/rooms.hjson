@@ -1,0 +1,24 @@
+{
+	tavern: {
+		name: Tavern
+		description: You're in a cozy tavern warmed by an open fire.
+		exits: {
+			outside: outside
+		}
+	}
+	outside: {
+		name: Outside the tavern
+		description: You're standing outside a tavern. It's raining.
+		exits: {
+			inside: tavern
+			north: spookyForest
+		}
+	}
+	spookyForest: {
+		name: Spooky forest
+		description: The wind blows gently through the bare trees and a fog obscures the distant landscape.
+		exits: {
+			south: outside
+		}
+	}
+}

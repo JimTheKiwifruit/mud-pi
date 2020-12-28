@@ -22,22 +22,41 @@ author: Mark Frimston - mfrimston@gmail.com
 """
 
 import time
+from pathlib import Path
+import hjson
+from termcolor import colored
 
 # import the MUD server class
 from mudserver import MudServer
 
 
+def fmtPlayerName(playerName: str) -> str:
+	return colored(playerName, "yellow")
+
+
+def fmtRoomName(roomName: str) -> str:
+	return colored(roomName, "green")
+
+
+def fmtRoomDescription(roomDesc: str) -> str:
+	return roomDesc + "\n"
+
+
+def fmtLook(room: dict) -> str:
+	return fmtRoomName(room["name"]) + "\n\r" + room["description"].strip()
+
+
+def getPlayerRoom(id: int) -> dict:
+	return rooms[players[id]["room"]]
+
+
+def setPlayerRoom(id: int, room: dict) -> dict:
+	players[id]["room"] = room
+	return room
+
+
 # structure defining the rooms in the game. Try adding more rooms to the game!
-rooms = {
-	"Tavern": {
-		"description": "You're in a cozy tavern warmed by an open fire.",
-		"exits": {"outside": "Outside"},
-	},
-	"Outside": {
-		"description": "You're standing outside a tavern. It's raining.",
-		"exits": {"inside": "Tavern"},
-	}
-}
+rooms = hjson.loads(Path("data/rooms.hjson").read_text())
 
 # stores the players in the game
 players = {}
@@ -84,8 +103,7 @@ while True:
 		for pid, pl in players.items():
 			# send each player a message to tell them about the diconnected
 			# player
-			mud.send_message(pid, "{} quit the game".format(
-														players[id]["name"]))
+			mud.send_message(pid, f"{fmtPlayerName(players[id]['name'])} quit the game")
 
 		# remove the player's entry in the player dictionary
 		del(players[id])
@@ -103,21 +121,19 @@ while True:
 		if players[id]["name"] is None:
 
 			players[id]["name"] = command
-			players[id]["room"] = "Tavern"
+			players[id]["room"] = "tavern"
 
 			# go through all the players in the game
 			for pid, pl in players.items():
 				# send each player a message to tell them about the new player
-				mud.send_message(pid, "{} entered the game".format(
-														players[id]["name"]))
+				mud.send_message(pid, f"{fmtPlayerName(players[id]['name'])} entered the game")
 
 			# send the new player a welcome message
-			mud.send_message(id, "Welcome to the game, {}. ".format(
-														   players[id]["name"])
+			mud.send_message(id, f"Welcome to the game, {fmtPlayerName(players[id]['name'])}. "
 							 + "Type 'help' for a list of commands. Have fun!")
 
 			# send the new player the description of their current room
-			mud.send_message(id, rooms[players[id]["room"]]["description"])
+			mud.send_message(id, fmtLook(getPlayerRoom(id)))
 
 		# each of the possible commands is handled below. Try adding new
 		# commands to the game!
@@ -142,35 +158,32 @@ while True:
 				# if they're in the same room as the player
 				if players[pid]["room"] == players[id]["room"]:
 					# send them a message telling them what the player said
-					mud.send_message(pid, "{} says: {}".format(
-												players[id]["name"], params))
+					mud.send_message(pid, "{} says: {}".format(fmtPlayerName(players[id]["name"]), params))
 
 		# 'look' command
-		elif command == "look":
+		elif command == "look" or command == "l":
 
 			# store the player's current room
-			rm = rooms[players[id]["room"]]
+			rm = getPlayerRoom(id)
 
 			# send the player back the description of their current room
-			mud.send_message(id, rm["description"])
+			mud.send_message(id, fmtLook(rm))
 
 			playershere = []
 			# go through every player in the game
 			for pid, pl in players.items():
 				# if they're in the same room as the player
-				if players[pid]["room"] == players[id]["room"]:
+				if players[pid]["room"] == rm:
 					# ... and they have a name to be shown
 					if players[pid]["name"] is not None:
 						# add their name to the list
-						playershere.append(players[pid]["name"])
+						playershere.append(fmtPlayerName(players[pid]["name"]))
 
 			# send player a message containing the list of players in the room
-			mud.send_message(id, "Players here: {}".format(
-													", ".join(playershere)))
+			mud.send_message(id, "Players here: {}".format(", ".join(playershere)))
 
 			# send player a message containing the list of exits from this room
-			mud.send_message(id, "Exits are: {}".format(
-													", ".join(rm["exits"])))
+			mud.send_message(id, "Exits are: {}".format(", ".join(rm["exits"])))
 
 		# 'go' command
 		elif command == "go":
@@ -179,7 +192,7 @@ while True:
 			ex = params.lower()
 
 			# store the player's current room
-			rm = rooms[players[id]["room"]]
+			rm = getPlayerRoom(id)
 
 			# if the specified exit is found in the room's exits list
 			if ex in rm["exits"]:
@@ -192,12 +205,10 @@ while True:
 							and pid != id:
 						# send them a message telling them that the player
 						# left the room
-						mud.send_message(pid, "{} left via exit '{}'".format(
-													  players[id]["name"], ex))
+						mud.send_message(pid, "{} left via exit '{}'".format(fmtPlayerName(players[id]["name"]), ex))
 
 				# update the player's current room to the one the exit leads to
-				players[id]["room"] = rm["exits"][ex]
-				rm = rooms[players[id]["room"]]
+				rm = setPlayerRoom(id, rm["exits"][ex])
 
 				# go through all the players in the game
 				for pid, pl in players.items():
@@ -208,19 +219,17 @@ while True:
 						# send them a message telling them that the player
 						# entered the room
 						mud.send_message(pid,
-										 "{} arrived via exit '{}'".format(
-													  players[id]["name"], ex))
+										 "{} arrived via exit '{}'".format(fmtPlayerName(players[id]["name"]), ex))
 
 				# send the player a message telling them where they are now
-				mud.send_message(id, "You arrive at '{}'".format(
-														  players[id]["room"]))
+				mud.send_message(id, "You arrive at '{}'".format(fmtRoomName(rm["name"])))
 
 			# the specified exit wasn't found in the current room
 			else:
 				# send back an 'unknown exit' message
-				mud.send_message(id, "Unknown exit '{}'".format(ex))
+				mud.send_message(id, f"Unknown exit '{ex}'")
 
 		# some other, unrecognised command
 		else:
 			# send back an 'unknown command' message
-			mud.send_message(id, "Unknown command '{}'".format(command))
+			mud.send_message(id, f"Unknown command '{command}'")
